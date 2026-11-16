@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+config.json
+.cursor/
+.DS_Store
+# 个人持仓数据，不要提交到公开仓库
+data/

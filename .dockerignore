@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+.git
+.env
+config.json
+design-system
+.cursor
+*.md

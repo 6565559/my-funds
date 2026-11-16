@@ -1,0 +1,14 @@
+services:
+  my-funds:
+    build: .
+    ports:
+      - "5288:5288"
+    environment:
+      HOST: 0.0.0.0
+      PORT: "5288"
+      MY_FUNDS_DATA: /data
+      CONFIG_PATH: /config/config.json
+    volumes:
+      - ./data:/data
+      - ./config.json:/config/config.json:ro
+    restart: unless-stopped
