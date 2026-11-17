@@ -9,7 +9,7 @@ async function request(url, options = {}) {
   const res = await fetch(url, { credentials: 'include', ...options });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) throw new AuthRequired();
-  if (!res.ok) throw new Error(data.error || `请求失败 ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `请求失败 ${res.status}`), {status:res.status});
   return data;
 }
 
@@ -28,7 +28,22 @@ export const api = {
   quotes: (codes) => request(`/api/quotes?codes=${codes.join(',')}`),
   performance: (range) => request(`/api/performance?range=${encodeURIComponent(range)}`),
   indices: (symbols) => request(`/api/indices?symbols=${symbols.join(',')}`),
+  indexValuations: (window, metric, refresh = false) => request(
+    `/api/index-valuations${refresh ? '/refresh' : ''}?${new URLSearchParams({ window, metric })}`,
+    refresh ? json('POST', {}) : {},
+  ),
+  indexValuationHistory: (code, window, metric) => request(
+    `/api/index-valuations/${encodeURIComponent(code)}/history?${new URLSearchParams({ window, metric })}`,
+  ),
   search: (key) => request(`/api/search?key=${encodeURIComponent(key)}`),
+  backtests: () => request('/api/backtests'),
+  backtest: (id) => request(`/api/backtests/${encodeURIComponent(id)}`),
+  createBacktest: (data) => request('/api/backtests', json('POST', data)),
+  dcaPlans: (refresh = false) => request(`/api/dca-plans${refresh ? '?refresh=1' : ''}`),
+  createDcaPlan: (data) => request('/api/dca-plans', json('POST', data)),
+  updateDcaPlan: (id, data) => request(`/api/dca-plans/${encodeURIComponent(id)}`, json('PATCH', data)),
+  addDcaBuy: (id, data) => request(`/api/dca-plans/${encodeURIComponent(id)}/buys`, json('POST', data)),
+  voidDcaRecord: (id, recordId, revision) => request(`/api/dca-plans/${encodeURIComponent(id)}/records/${recordId}/void`, json('POST', {revision})),
   previewCertificate: (file) =>
     request('/api/import/certificate/preview', {
       method: 'POST',

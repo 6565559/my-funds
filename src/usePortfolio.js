@@ -190,5 +190,6 @@ export function usePortfolio() {
     save,
     replace,
     logout,
+    expire,
   };
 }

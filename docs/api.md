@@ -40,3 +40,46 @@ curl -H "Authorization: Bearer $MY_FUNDS_API_KEY" \
 - Key 不授予现有 `/api/portfolio`、导入、删除、备份恢复等接口权限；它们继续使用网页登录。
 - 响应设置 `Cache-Control: no-store` 和 `Referrer-Policy: no-referrer`，不包含登录配置或 Key。
 - 本接口用于服务端调用或直接访问，未开放跨域 CORS。对公网提供服务时应使用 HTTPS；本次功能不修改路由器端口转发或公网入口。
+
+# 指数估值网页登录接口
+
+以下接口沿用网页登录 Cookie 鉴权，不接受外部持仓 API Key 代替登录。
+
+| 方法 | 地址 | 说明 |
+| --- | --- | --- |
+| GET | `/api/index-valuations?window=10y&metric=pe` | 六个指数的 PE/PB 快照、所选指标温度和分布 |
+| POST | `/api/index-valuations/refresh?window=10y&metric=pe` | 请求更新并返回列表，受一小时冷却限制 |
+| GET | `/api/index-valuations/000300.SH/history?window=5y&metric=pb` | 指定指数、指标、窗口内原始日估值序列 |
+
+`window` 只接受 `5y` / `10y`（默认 `10y`），`metric` 只接受 `pe` / `pb`（默认 `pe`）。代码仅接受首版目录中的六个指数。非法及重复参数返回400，未登录返回401。
+
+列表返回 `rows`、`source`、`window`、`metric`、`distribution`、`covered`、`excluded`。每行包含 `code`、`name`、`pe`、`pb`；每项指标包含 `value`（倍）、`date`（原始估值日期）、`temperature`（0–100，未四舍五入）、`band`、`status`、`windowStart`、`historyStart`、`historyEnd`、`sampleCount`、`fetchedAt`、`nextRefreshAt`、`error`。
+
+`source` 包含来源名称、链接、指标口径及 `methodVersion`。历史接口还返回 `series: [{date,value}]`，无效值用 null，不跨缺失值填充曲线。
+
+状态包括 `ok`、`insufficient`（历史不足）、`invalid`（当前估值无效）、`stale`（落后于来源更新日或超过7天）、`cached`（采集失败但保留旧值）、`error`、`missing`。仅 `ok` 纳入分布；缓存中的温度仅对应其原始估值日期。来源失败时列表可部分成功并返回200，调用方必须读取逐项状态。
+
+分位使用同来源有效日样本的经验分布，`≤ 当前值` 计入分子，包含当天。四档区间为 `[0,20]`、`(20,50]`、`(50,80)`、`[80,100]`。窗口不足不返回温度。数据持久化到 `data/index-valuations.sqlite`，与持仓 JSON 导出分开。
+
+# 4%定投网页登录接口
+
+VectorBT 回测接口另见 [回测 API 与运行说明](backtesting.md#网页登录接口)。
+
+同样使用网页登录 Cookie，外部持仓API Key不授予权限。所有响应设置 `Cache-Control: no-store`，不会写入持仓文件。
+
+| 方法 | 地址 | 请求 / 响应 |
+| --- | --- | --- |
+| GET | `/api/dca-plans` | 返回 `{plans,catalog,source}`；可选 `?refresh=1` 更新行情，估值仍遵守上游冷却限制 |
+| POST | `/api/dca-plans` | 创建计划，返回持久化计划 |
+| GET | `/api/dca-plans/:id` | 计划、事件、行情和计算结果 |
+| PATCH | `/api/dca-plans/:id` | 修改配置或提交 `basis` 基准校正 |
+| POST | `/api/dca-plans/:id/buys` | 提交实际买入 |
+| POST | `/api/dca-plans/:id/records/:recordId/void` | 撤销最后有效事件 |
+
+创建字段：`name`、`fundCode`（六位）、`indexCode`、`metric`（pe/pb）、`budget`（元）、`parts`（默认10，1–100）、`buyBelow`（20或50）、可选 `capital`（元）、`status`（active/paused）。金额建议使用十进制字符串，最多两位小数；基金名称由服务器验证后保存。
+
+修改、买入、撤销均携带当前 `revision`。买入例：`{"revision":1,"requestId":"UUID","date":"2026-11-16","nav":"0.95","amount":"100.00"}`。基准校正使用PATCH：`{"revision":2,"basis":{"requestId":"UUID","date":"2026-11-16","nav":"0.90","reason":"现金分红"}}`。日期不得晚于北京时间今天，净值最多六位小数。撤销请求为 `{"revision":3}`。
+
+买入和校正的 `requestId` 必须为UUID；同一请求重试返回已有结果，不重复记账，同一标识不同内容返回409。并发修订冲突或超预算返回409，非法输入返回400，计划/记录不存在返回404，未登录返回401。前端保留HTTP状态，冲突后刷新计划并保留表单输入，用户核对后再次提交。写请求成功不依赖行情查询；写后重新GET计算结果。
+
+读响应含 `records`（保留 `voidedAt`）、整数分的预算/投入金额、整数百万分之一的净值，以及 `summary`：`spentCents`、`remainingCents`、`nextAmountCents`、`anchor`、`lastBuy`、`triggerNav`、`concentrationWarning`、`state`、`reason`。状态为 `first`、`ready`、`waiting`、`valuation`、`high`、`unavailable`、`paused`、`exhausted`。只有有效同日正式净值和估值才可能返回first/ready，行情失败仍返回计划账本及unavailable状态。批量行情缓存60秒，失败缓存15秒，无计划时不发起行情请求。

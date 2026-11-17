@@ -22,22 +22,34 @@ import { PageSkeleton } from "./components/shared";
 const PerformanceView = lazy(() => import("./components/PerformanceView"));
 const AllocationView = lazy(() => import("./components/AllocationView"));
 const ImportView = lazy(() => import("./components/ImportView"));
+const IndexTemperatureView = lazy(() => import("./components/IndexTemperatureView"));
+const DcaPlansView = lazy(() => import("./components/DcaPlansView"));
+const BacktestView = lazy(() => import("./components/BacktestView"));
 const VIEWS = {
   holdings: HoldingsView,
   performance: PerformanceView,
   allocation: AllocationView,
   import: ImportView,
+  temperature: IndexTemperatureView,
+  dca: DcaPlansView,
+  backtest: BacktestView,
 };
 const PAGES = [
   ["holdings", "持仓概览"],
   ["performance", "收益统计"],
   ["allocation", "资产配置"],
+  ["temperature", "指数温度计"],
+  ["dca", "4% 定投计划"],
+  ["backtest", "策略回测"],
   ["import", "导入 / 导出"],
 ];
 const DESCRIPTIONS = {
   holdings: "集中查看持仓、收益与各账户的资产分布。",
   performance: "用历史净值，回看当前持仓的表现。",
   allocation: "了解资产分布，让持仓回到你的目标配置。",
+  temperature: "用历史估值分位，观察常用指数的冷与热。",
+  dca: "低估时分份投入，用实际成交净值确定下一次触发价。",
+  backtest: "用历史数据检验定投规则，比较参数与不同投入方式。",
   import: "同步账户持仓，管理数据备份。",
 };
 
@@ -65,6 +77,7 @@ export default function App() {
     .sort()
     .reverse();
   const title = PAGES.find(([id]) => id === tab)[1];
+  const independent = ["temperature", "dca", "backtest"].includes(tab);
   async function save(next, message) {
     await state.save(next);
     if (message) toast.success(message);
@@ -152,7 +165,7 @@ export default function App() {
               {DESCRIPTIONS[tab]}
             </p>
           </div>
-          {portfolio && (
+          {portfolio && !independent && (
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Switch
@@ -194,10 +207,11 @@ export default function App() {
             )}
           </div>
         )}
-        {!result || status === "loading" ? (
+        {(!result || status === "loading") && !independent ? (
           status !== "error" && <PageSkeleton />
         ) : (
           <>
+            {!independent && <>
             <div
               className={`mb-5 grid gap-4 ${result.holdGain == null ? "md:grid-cols-[1.15fr_1fr_1fr]" : "md:grid-cols-2 xl:grid-cols-4"}`}
             >
@@ -319,7 +333,9 @@ export default function App() {
                 </Button>
               </div>
             )}
+            </>}
             {visited.map((id) => {
+              if (!result && !["temperature", "dca", "backtest"].includes(id)) return null;
               const View = VIEWS[id];
               return (
                 <div key={id} hidden={tab !== id}>
@@ -330,12 +346,14 @@ export default function App() {
                       quoteMap={quoteMap}
                       onSave={save}
                       onReplaced={state.replace}
+                      active={tab === id}
+                      onAuthRequired={state.expire}
                     />
                   </Suspense>
                 </div>
               );
             })}
-            <footer className="mt-7 flex flex-wrap items-center justify-between gap-2 border-t pt-5 text-[11px] text-muted-foreground">
+            {!independent && <footer className="mt-7 flex flex-wrap items-center justify-between gap-2 border-t pt-5 text-[11px] text-muted-foreground">
               <span>
                 行情更新{" "}
                 {state.refreshedAt?.toLocaleTimeString("zh-CN", {
@@ -347,7 +365,7 @@ export default function App() {
                 {mairui ? `麦蕊今日 ${mairui.used}/${mairui.limit} 次 · ` : ""}
                 估值仅供参考，以公布净值为准
               </span>
-            </footer>
+            </footer>}
           </>
         )}
         {settings && portfolio && (

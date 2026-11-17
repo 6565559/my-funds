@@ -2,8 +2,8 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
-import { loadPortfolio, savePortfolio, listBackups, readBackup } from './store.js';
-import { getQuotes, getIndices, searchFunds, mairuiStatus } from './quotes.js';
+import { loadPortfolio, savePortfolio, listBackups, readBackup, dataPath } from './store.js';
+import { getQuotes, getIndices, getFundTypes, searchFunds, mairuiStatus } from './quotes.js';
 import { parseCertificatePdf } from './certificate.js';
 import {
   normalizePortfolio,
@@ -15,6 +15,11 @@ import {
 import { installAuth, loadAuth } from './auth.js';
 import { portfolioPerformance } from './performance.js';
 import { readOpenPortfolio } from './open-api.js';
+import { openValuationDb, readSeries } from './valuation-db.js';
+import { createValuationService, installValuationRoutes } from './index-valuations.js';
+import { openDcaDb, createDcaStore } from './dca-store.js';
+import { createDcaService, installDcaRoutes } from './dca-plans.js';
+import { openBacktestDb, createBacktestService, installBacktestRoutes } from './backtests.js';
 
 const PORT = Number(process.env.PORT || 5288);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -23,6 +28,15 @@ const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 installAuth(app, loadAuth(HOST));
+const valuationDb = openValuationDb(dataPath('index-valuations.sqlite'));
+const valuations = createValuationService({ db: valuationDb });
+installValuationRoutes(app, valuations);
+const dcaDb = openDcaDb(dataPath('investment-plans.sqlite'));
+installDcaRoutes(app, createDcaService({store:createDcaStore(dcaDb),getQuotes,getFundTypes,valuations}));
+const backtestDb = openBacktestDb(dataPath('backtests/backtests.sqlite'));
+installBacktestRoutes(app, createBacktestService({db:backtestDb,valuations,getFundTypes,
+  readValuations:(code,metric)=>readSeries(valuationDb,code,metric)}));
+process.on('exit', () => { valuationDb.close(); dcaDb.close(); backtestDb.close(); });
 
 const route = (fn) => async (req, res) => {
   try {
