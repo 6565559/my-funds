@@ -11,6 +11,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY server ./server
+COPY backtest/schema.sql ./backtest/schema.sql
 COPY shared ./shared
 COPY --from=build /app/dist ./dist
 ENV HOST=0.0.0.0

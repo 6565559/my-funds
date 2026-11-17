@@ -12,3 +12,12 @@ services:
       - ./data:/data
       - ./config.json:/config/config.json:ro
     restart: unless-stopped
+  backtest-worker:
+    build:
+      context: .
+      dockerfile: backtest/Dockerfile
+    volumes:
+      - ./data/backtests:/data
+    restart: unless-stopped
+    mem_limit: 1536m
+    cpus: 1.0

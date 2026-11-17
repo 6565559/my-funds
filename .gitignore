@@ -6,3 +6,7 @@ config.json
 .DS_Store
 # 个人持仓数据，不要提交到公开仓库
 data/
+__pycache__/
+.venv/
+# 本地开发与部署记录，可能包含 NAS 路径和验收数据
+docs/superpowers/
